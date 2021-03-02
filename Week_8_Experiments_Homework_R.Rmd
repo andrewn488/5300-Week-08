@@ -1,0 +1,176 @@
+---
+title: "Week 8  Regression Discontinuity Homework R Question ANSWERS"
+author: "Andrew Nalundasan"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+
+In the following code chunk, load all the libraries you will need:
+
+```{r}
+library(tidyverse)
+library(jtools)
+library(vtable)
+library(estimatr)
+library(car)
+```
+
+## Tasks:
+
+We will be looking at, and replicating, [this paper](https://onlinelibrary.wiley.com/doi/epdf/10.1111/ajps.12052) which performs a large-scale experiment where they randomly send people letters encouraging them to conserve water, and then observe how their water usage changes afterwards. Further, they look at whether the effect of the experiment differs depending on whether you're an active voter, and whether you are a Democrat or Republican.
+
+
+a. First we'll need to load the data. Download the `week_8_experiment_data.Rdata` file from Canvas, put it in your working directory (perhaps the same folder this file is saved in, then go Session -> Set Working Directory -> Set to Source File Location). Then use `readRDS()` to load it into R, storing it as `df`.
+
+```{r}
+df <- readRDS('02_raw_data/week_8_experiment_data.Rdata')
+```
+
+Use `vtable` in **vtable** with `lush = TRUE` to show the values the variables take as well as their descriptions. This will also show the number of missing observations in each variable.
+
+```{r}
+vtable(df, lush = TRUE)
+```
+
+Based on the `vtable` output, can we detect any attrition from the sample?
+
+ANSWER HERE: No.
+
+b. Before evaluating the results of the experiment, let's check for balance.
+
+Using a series of pipes (and not saving the results anywhere), use `select()` to get rid of the outcome variable `summer_07` and the neighborhood indicator `route`, and use `sumtable()` to create a balance table  comparing across the treatment variable `alltreat`, including `group.test = TRUE`.
+
+```{r}
+df %>% select(-summer_07, -route) %>% 
+  sumtable(group = "alltreat", group.test = TRUE)
+```
+
+Based on the balance table, is there any apparent reason to be worried about the randomization procedure or existing confounders?
+
+ANSWER HERE: No - all differences look quite small in the absolute term, which leads me to believe that the randomization procedure was effective.  
+
+c. Even though we'd have no way of seeing it in the data, there's the possibility for a compliance issue here. Remembering that the experimental design is that they randomize a bunch of households, and send households a letter. The treatment that they're interested in is whether people will be moved to reduce their water usage by reading the letter.
+
+What is the potential compliance issue? And, given that we can't do anything to address it, what will it do to our estimate? What would we call the estimate that we *do* get?
+
+ANSWER HERE: What it does to the estimate is it will cause it to appear smaller than what it really is. This would be called the Intent To Treat (ITT) estimate 
+
+Compliance issue - even though letters have been sent, water usage may not have changed. 
+
+d. Use `lm_robust()` from **estimatr** to perform a basic estimation of the experiment's effect with robust standard errors. Store the result and show it in an `export_summs()` table from **jtools**.
+
+```{r}
+m1 <- lm_robust(summer_07 ~ alltreat, data = df)
+
+export_summs(m1)
+```
+
+Keeping in mind that all water usage variables are on the scale of thousands of gallons, what is the effect of being sent a letter on water usage?
+
+ANSWER HERE: Being sent the letter reduces water usage by 890 gallons over the course of the summer.
+
+e. Density and mean comparisons across treatment
+
+Let's check the effect of the experiment in other ways.
+
+Use `sumtable()` to do a group test again, this time to see how the distribution of `summer_07` varies across treatment.
+
+```{r}
+sumtable(df, group = "summer_07", group.test = TRUE)
+```
+
+Then, use `ggplot()` to create a `geom_density()` plot of `summer_07`, using `color = alltreat` to see how the distribution of the outcome variable varies across treatment.
+
+```{r}
+ggplot(data = df, aes(summer_07), color = alltreat) + 
+  geom_density()
+```
+
+Based on what you see in the graph, what might you have done differently if you were analyzing this data yourself? (don't worry, I checked - even if you do that the results hold up, although the effect size does get a bit less impressive - it really does seem implausibly huge as is)
+
+ANSWER HERE: What I might have done differently would be to trim the observations to tamp down the skewedness. 
+
+f. Do a power analysis. The authors performed their own power analysis before starting the study (which is the proper time to do it, rather than afterwards like we're doing here!) But let's do another one.
+
+Go to [this power analysis calculator](http://powerandsamplesize.com/Calculators/Compare-2-Means/2-Sample-Equality). Set $\alpha = .05$, then use data from the actual sample to fill in $n_b$ (treated group) and $\kappa = n_a/n_b$ (sampling ratio). Pretending that we haven't run the experiment yet, use `water_2006` to estimate the standard deviation of the outcome $\sigma$. Set the group a mean $\mu_A$ to 0. Then, play around with the $\mu_B$ values to find the *minimum detectable effect* ( $\mu_B - \mu_A$ ) to get 90% power to detect the effect.
+
+```{r}
+# Calculate n_B:
+# n = 34098
+df %>% count(alltreat)
+
+# calculate kappa:
+# 69783 / 34098 = 2.046
+
+# Calculate sigma:
+# water_2006 == 40.551
+sigma <- sd(df$water_2006)
+
+```
+
+What is the minimum detectable effect?
+
+ANSWER HERE: 0.61??
+
+f2. Extra credit point:
+
+Perform the same power analysis as in part f, but use a simulation. You can follow [this guide](https://nickch-k.github.io/EconometricsSlides/Week_08/Power_Simulations.html).
+
+When generating the data, since our outcome variable is so skewed, create it instead using `rlnorm()` (see `help(rlnorm)`). Set the mean to the log of the mean of `water_2006`, and the standard deviation to the log of the standard deviation of `water_2006`. Use the number of observations in the actual data as the number of observations in the simulated data.
+
+Because we're properly taking account of the skewed nature of the data, our simulation result for the minimum detectable effect will not be the same as the answer in part f, but will be more accurate. Don't worry about finding the answer super-precisely, maybe get it down to the first digit after the decimal place.
+
+Run your simulation 250 times for each effect you try.
+
+```{r}
+# OPTIONALLY ANSWER HERE
+```
+
+The minimum detectable effect to get 90% power is between:
+
+ANSWER HERE: 0.61
+
+g. The study then goes on to see whether the effect of the instrument is different between non-voters and Democrats/Republicans. It also looks for a difference between Democrats and Republicans. 
+
+Given the result of our power analysis in part f/f2, give your thoughts on what the power is likely to be for this comparison. Will we have enough sample? How do you know? You'll want to refer back to the results in part d.
+
+ANSWER HERE: Power will likely be low powered. We wouldn't have enough people to see the effect since we'd need 16x 34,000 observations. 
+
+h. In the original study (and as we will do here), the authors include control variables in their regression when they check whether the experimental effect differs based on voting history.
+
+Is this a good idea? Difficult question - we haven't covered this in the material. But think through it, and what controls are *for*.
+
+ANSWER HERE: Since controls are for reducing chance of endogeneity, we can assume that this is a bad idea because it could potentially open up backdoors that we don't know about.  
+
+i. Run the analysis of the experimental effect again. This time, include an interaction between treatment and being a Democrat, as well as between treatment and being a Republican. Also, include all the other variables as controls. Don't put `route` in the list of controls directly. Instead, include it as a fixed effect (keeping in mind that randomization in the study occurs *within `route`* - so controlling for all between variation should get us back to more or less random assignment). Store the result and put it along with your result from step d in the same `export_summs` table, using the `coefs` option to only show the coefficients for treatment and its interactions (you might want to try it yourself first without the `coefs` option so you can see how to refer to the variable names in `coefs`).
+
+```{r}
+m2 <- lm_robust(summer_07 ~ alltreat*dem_hh + alltreat*rep_hh + water_2006 + apr_may_07 + fmv + owner + old + factor(route), data = df)
+
+export_summs(m1, m2, coefs = c('alltreat', 'alltreat:dem_hhTRUE', 'alltreat:rep_hhTRUE'))
+```
+
+j. Keeping in mind that reducing the dependent variable (water usage) means the treatment is *more* effective, interpret the coefficients shown in the `export_summs()` table in part i. Keep in mind that everyone in the data is "Democratic", "Republican", or "Not voter-active" (sorry third parties; this makes more sense in the original paper)
+
+ANSWER HERE: For all households that identify as Democratic households that are sent the letter reduce water usage by 610 gallons over the course of the summer. For all households that identify as Republican households that are sent the letter reduce water usage by 490 gallons over the course of the summer. For all households that are not voter-active that are sent the letter reduce water usage by 640 gallons over the course of the summer. Those that receive the letter and are registered democrats reduced their water consumption by 1250 gallons over the course of the summer, while registered republicans reduced their water consumption by 1130 gallons over the course of the summer. 
+
+Use `linearHypothesis()` from **car** to test( (1) if the treatment is different for Democrats and/or Republicans than it is for others, and (2) if the treatment is differently effective for Democrats than it is for Republicans.
+
+```{r}
+linearHypothesis(m2, c('alltreat:dem_hhTRUE', 'alltreat:rep_hhTRUE'))
+linearHypothesis(m2, c('alltreat:dem_hhTRUE' = 'alltreat:rep_hhTRUE'))
+```
+
+Can we claim that the experiment had  a different effect on Democrats and/or Republicans at the 10% level?
+
+ANSWER HERE: Yes. 
+
+Can we claim that the experiment had a different effect on Democrats than it did on Republicans at the 10% level?
+
+ANSWER HERE: Yes.
