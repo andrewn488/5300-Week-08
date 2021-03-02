@@ -59,9 +59,7 @@ c. Even though we'd have no way of seeing it in the data, there's the possibilit
 
 What is the potential compliance issue? And, given that we can't do anything to address it, what will it do to our estimate? What would we call the estimate that we *do* get?
 
-ANSWER HERE: What it does to the estimate is it will cause it to appear smaller than what it really is. This would be called the Intent To Treat (ITT) estimate 
-
-Compliance issue - even though letters have been sent, water usage may not have changed. 
+ANSWER HERE: A potential compliance issue would be if households actually did or did not reduce their water usage after receiving the letter. What it does to the estimate is it will cause it to be smaller than if there was perfect compliance. This would be called the Intent To Treat (ITT) estimate. 
 
 d. Use `lm_robust()` from **estimatr** to perform a basic estimation of the experiment's effect with robust standard errors. Store the result and show it in an `export_summs()` table from **jtools**.
 
@@ -94,7 +92,7 @@ ggplot(data = df, aes(summer_07), color = alltreat) +
 
 Based on what you see in the graph, what might you have done differently if you were analyzing this data yourself? (don't worry, I checked - even if you do that the results hold up, although the effect size does get a bit less impressive - it really does seem implausibly huge as is)
 
-ANSWER HERE: What I might have done differently would be to trim the observations to tamp down the skewedness. 
+ANSWER HERE: What I might have done differently would be to use a log-transformation to tamp down the skewed distribution of the data.
 
 f. Do a power analysis. The authors performed their own power analysis before starting the study (which is the proper time to do it, rather than afterwards like we're doing here!) But let's do another one.
 
@@ -106,17 +104,18 @@ Go to [this power analysis calculator](http://powerandsamplesize.com/Calculators
 df %>% count(alltreat)
 
 # calculate kappa:
-# 69783 / 34098 = 2.046
+# n_a = 69783, n_b = 34098
+# n_a / n_b = 2.046
 
 # Calculate sigma:
-# water_2006 == 40.551
+# water_2006 == 40.99
 sigma <- sd(df$water_2006)
 
 ```
 
 What is the minimum detectable effect?
 
-ANSWER HERE: 0.61??
+ANSWER HERE: 0.88
 
 f2. Extra credit point:
 
@@ -134,13 +133,14 @@ Run your simulation 250 times for each effect you try.
 
 The minimum detectable effect to get 90% power is between:
 
-ANSWER HERE: 0.61
+ANSWER HERE: 
 
 g. The study then goes on to see whether the effect of the instrument is different between non-voters and Democrats/Republicans. It also looks for a difference between Democrats and Republicans. 
 
 Given the result of our power analysis in part f/f2, give your thoughts on what the power is likely to be for this comparison. Will we have enough sample? How do you know? You'll want to refer back to the results in part d.
 
-ANSWER HERE: Power will likely be low powered. We wouldn't have enough people to see the effect since we'd need 16x 34,000 observations. 
+ANSWER HERE: Power will likely be low powered, less than 90%. We wouldn't have enough people to see the effect since we'd need 16 * ~34,000 observations since it takes 16X people to see whether the effect differs between the two groups. 
+
 
 h. In the original study (and as we will do here), the authors include control variables in their regression when they check whether the experimental effect differs based on voting history.
 
@@ -164,7 +164,7 @@ Use `linearHypothesis()` from **car** to test( (1) if the treatment is different
 
 ```{r}
 linearHypothesis(m2, c('alltreat:dem_hhTRUE', 'alltreat:rep_hhTRUE'))
-linearHypothesis(m2, c('alltreat:dem_hhTRUE' = 'alltreat:rep_hhTRUE'))
+linearHypothesis(m2, c('alltreat:dem_hhTRUE = alltreat:rep_hhTRUE'))
 ```
 
 Can we claim that the experiment had  a different effect on Democrats and/or Republicans at the 10% level?
@@ -173,4 +173,4 @@ ANSWER HERE: Yes.
 
 Can we claim that the experiment had a different effect on Democrats than it did on Republicans at the 10% level?
 
-ANSWER HERE: Yes.
+ANSWER HERE: No, we cannot reject the hypothesis. 
