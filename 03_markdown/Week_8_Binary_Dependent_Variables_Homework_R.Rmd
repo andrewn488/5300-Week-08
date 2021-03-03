@@ -1,0 +1,221 @@
+---
+title: "Week 8 Binary Dependent Variables Homework R Question ANSWERS"
+author: "Andrew Nalundasan"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+
+In the following code chunk, load all the libraries you will need:
+
+```{r}
+library(tidyverse)
+library(vtable)
+library(jtools)
+library(estimatr)
+library(margins)
+library(haven)
+library(car)
+library(lmtest)
+```
+
+## Tasks:
+
+We will be looking at, and replicating, [this paper](https://www.aeaweb.org/articles?id=10.1257/aer.p20171120) which looks at research papers in development economics and asks "did anyone ever try to replicate this paper?" Replication is an important part of the scientific method, but it is generally not done often enough.
+
+
+a. First we'll need to load the data. Make sure you've loaded the **haven** package first, which contains the `read_dta` function necessary to read the file, which is in Stata format. Then download the .dta file from Canvas, put it in your working directory (perhaps the same folder this file is saved in, then go Session -> Set Working Directory -> Set to Source File Location). Then use `read_dta` to load in the data and save it as `rep`.
+
+We will only need to focus on a few variables: `Replicated`, which indicates whether or not a given study has had a replication attempt, `Year` and `Journal`, which indicate when and where the original study was published, `RCT` which is an indicator for whether the study was of a randomized controlled trial (large-scale experiment, common in development economics; often "headline" and big-news studies are RCTs), and `Citations`, which indicates the number of citations the original article received, 
+
+Use `select` in the **tidyverse** to limit the data to just these variables. Then, we'll have no use for papers they couldn't find any information on, so `filter()` to remove observations with `Replicated == ''`.
+
+Then, a lot of the variables we'll be working with are stored as character variables. So use `mutate()` to turn them all into factors using the format `mutate(x = factor(x))` (style points if you can do it with `mutate(across())` instead, but this is unnecessary).
+
+Then, since the linear probability model we'll run in a moment won't work with factors, use `mutate()` to create `Replicated_num` equal to `1*(Replicated == 'Replicated')`.
+
+Then, there is one paper with way more citations than the others. Add `filter(Citations < 9000)`. Then, let's scale that to a more usable number by using `mutate()` to create `Citations1000 = Citations/1000`.
+
+Almost done! There is a set of journals in economics called the "top five" that receive special attention. Use `mutate()` to create the variable `TopFive` equal to `Journal %in% c('American Economic Review', 'Journal of Political Economy', 'Quarterly Journal of Economics', 'Econometrica', 'Review of Economic Studies')`
+
+Finally, use `vtable` in **vtable** with `lush = TRUE` to show the variables and the values they take.
+
+```{r}
+# Read in the data file
+rep <- read_dta('../02_raw_data/week_8_binary_depvar_replications.dta')
+
+# Clean data
+rep <- rep %>% 
+  select(c(Replicated, Year, Journal, RCT, Citations)) %>%  # select variables stated above
+  filter(Replicated != '') %>%      # filter for only papers with info (filter out null)
+  mutate(Replicated = factor(Replicated)) %>%     # make variables factor variables
+  mutate(Journal = factor(Journal)) %>%     
+  mutate(RCT = factor(RCT)) %>% 
+  mutate(Replicated_num = 1*(Replicated == 'Replicated')) %>% 
+  filter(Citations < 9000) %>%    # don't want these outliers
+  mutate(Citations1000 = Citations/1000)    # scale to more usable number
+
+rep <- rep %>% 
+  mutate(TopFive = Journal %in% c('American Economic Review', 
+                                  'Journal of Political Economy', 
+                                  'Quarterly Journal of Economics', 
+                                  'Econometrica', 
+                                  'Review of Economic Studies'))
+
+vtable(rep, lush = TRUE)
+```
+
+
+b. Let's focus on the impact of citation count on replication.
+
+First, let's look at the raw relationship, without any controls.
+
+Use `ggplot()` to make a `geom_point()` graph with `Citations` on the x-axis and `Replicated_num` on the y-axis. Then, add two `geom_smooth()` geometries. For the first, we'll just be getting smoothed local means. This is the default, so just add `color = 'red'` and the `se=FALSE` option here; we don't need the confidence bars (note: these smoothed local means can, because of the smoothing, sometimes also predict outside of 0 and 1, but not very far). For the second, we'll draw on the OLS fit. So add `se=FALSE` and also `method = 'lm`'.
+
+```{r}
+ggplot(data = rep, mapping = aes(x = Citations, y = Replicated_num)) + 
+  geom_point() + 
+  geom_smooth(se = FALSE, color = 'red') + 
+  geom_smooth(method = 'lm', se = FALSE)
+```
+
+Next, we're going to be using `lm_robust` to run our linear probability model. Why do we need to be sure to use `lm_robust()` and not `lm()` when running an LPM? Make reference to the graph you just made.
+
+ANSWER HERE: When the standard errors are between 0 and 1, the robust model should be used instead of the linear model. The linear model would be used for analysis outside the range of 0 and 1. The graph above shows results between 0 and 1.
+
+c. Next, use `lm_robust()` from **estimatr** to run two OLS (linear probability model) regressions, first just of `Replicated_num` on `Citations1000`, and then of `Replicated_num` on citations and the other control variables in the data (except for `Journal`, it's collinear with `TopFive` now). Save these as `lpm1` and `lpm2`, respectively, and show them in an `export_summs()` table from **jtools**.
+
+```{r}
+lpm1 <- lm_robust(Replicated_num ~ Citations1000, data = rep)
+lpm2 <- lm_robust(Replicated_num ~ Citations1000 + Year + RCT + TopFive, data = rep)
+
+export_summs(lpm1, lpm2)
+```
+
+Interpret the coefficient on `Citations1000` in Model 2.
+
+ANSWER HERE: A one-unit increase in Citations1000 indicates a 16 percentage point increase in the probability that Replicated_num = 1. 
+
+d. Get the predicted values from our `lpm2` model using `lpm2$fitted.values`, and use `mutate()` to add this as a new variable to our data called `lpm_fitted`. In LPM, the index and the predicted values are the same, so these values are basically the "index values" that we'd get in a GLM.
+
+```{r}
+rep <- rep %>% mutate(lpm_fitted = lpm2$fitted.values)
+```
+
+Then, repeat your graph from part b, except with `lpm_fitted` on the x-axis, and replace the `method = 'lm' `geom_smooth` line with `geom_line()`, putting a new `aes()` function inside of `geom_line` to use `lpm_fitted` on both the x-axis and the y-axis.
+
+```{r}
+ggplot(rep, aes(x = lpm_fitted, y = Replicated_num)) + 
+  geom_point() + 
+  geom_smooth(se = FALSE, color = 'red') + 
+  geom_line(aes(x = lpm_fitted, y = lpm_fitted))
+```
+
+e. Now, use `glm()` to run the same model as `lpm2` but as a probit and as a logit regression, saving these objects as `prob1` and `log1`, respectively.
+
+Show `lpm1, lpm2, prob1, log1` all in the same `export_summs()` table.
+
+```{r}
+prob1 <- glm(Replicated_num ~ Citations1000 + Year + RCT + TopFive, family = binomial(link = 'probit'), data = rep)
+
+log1 <- glm(Replicated_num ~ Citations1000 + Year + RCT + TopFive, family = binomial(link = 'logit'), data = rep)
+
+export_summs(lpm1, lpm2, prob1, log1)
+```
+
+f. Use `margins()` from the **margins** package (don't forget to install the development version of **broom** first with `remotes::install_github('tidymodels/broom')`) to get the marginal effects for `log1`, saving it as `log_m`. Then, make an `export_summs()` table with `lpm2` and `log_m`.
+
+```{r}
+log_m <- margins(log1)
+
+export_summs(lpm2, log_m)
+```
+
+Why is the effect on Citations1000 so different (and specifically, lower) in the logit result compared to the LPM? Hint: You may want to look back at the `vtable()` you made, it has a clue!
+
+ANSWER HERE: The mean is calculated differently in LPM vs logit. In our graph, the LPM model is a straight line, meaning the estimates will have a greater distance from the fitted line, indicating larger residuals. The number of observations for LPM is 1137 while for logit is 0. 
+
+g. Take a look at `help(predict.glm)`, which is the version of the `predict()` function that gets run when you give it a `glm` object like `log1`. 
+
+Figure out how to get predicted probability values from `log1` using `predict()`, and also how to get predicted *index* values from `log1` using `predict()` (they call it "link").
+
+Add both of these as new variables to your data, named `logit_predict` and `logit_index`.
+
+```{r}
+help(predict.glm)
+
+rep <- rep %>% mutate(logit_predict = predict(log1, type = 'response'),
+              logit_index = predict(log1, type = 'link'))
+```
+
+Then, replicate your graph from step d, but use `logit_index` instead of `lpm_fitted` on the x-axis, and when doing the `geom_line`, use `logit_predict` on the y-axis.
+
+```{r}
+ggplot(rep, aes(x = logit_index, y = Replicated_num)) + 
+  geom_point() + 
+  geom_smooth(se = FALSE, color = 'red') + 
+  geom_line(aes(x = logit_index, y = logit_predict))
+
+```
+
+h. Next, use `margins()` again to get the marginal effect from `log1` at `TopFive = FALSE`, storing the result as `log_m_topfive`
+
+```{r}
+log_m_topfive <- margins(log1, at = list(TopFive = FALSE))
+```
+
+Now run `log2`, which is the same model as `log1` (except that it drops `TopFive` as a predictor), but uses `filter()` to only include observations for which `TopFive == FALSE`. Then get the `margins()` from it, storing that as `log2_m`. Show `log_m_topfive` and `log2_m` in the same `export_summs()` table.
+
+```{r}
+log2 <- glm(Replicated_num ~ Citations1000 + Year + RCT, family = binomial(link = 'logit'),             data = rep %>% filter(TopFive == FALSE)) 
+
+log2_m <- margins(log2)
+
+export_summs(log_m_topfive, log2_m)
+```
+
+Why do `log2_m` and `log_m_topfive` produce different coefficients on `Citations1000`?
+
+ANSWER HERE: In log_m_topfive, the logit model is calculated first, followed by removing the TopFive variable and runnig the margins. While in log2_m, TopFive is removed prior to running the margins in order to calculate the average marginal effect. Normally, we'd expect to be seeing the same coefficients on here. 
+
+i. Look at the `log_m` results again in an `export_summs()` table.
+
+```{r}
+export_summs(log_m)
+```
+
+*Carefully* interpret the coefficient on Citations1000, keeping in mind the scale of the variables, how the marginal effect changes across the index, and *the fact that `margins()` produces an average marginal effect by default*.
+
+ANSWER HERE: For every one-unit increase in additional citations of a study, there is a 7 percentage point increase in the probability that the study was replicated, on average. 
+
+j. Finally, let's test for the joint significance of `RCTYes` and `TopFive` in the `log1` model.
+
+First, use `linearHypothesis` from **car** to test if both of these are jointly 0.
+
+```{r}
+linearHypothesis(log1, c('RCTYes', 'TopFiveTRUE'))
+```
+
+Are these two jointly significant under this test at the 1% level?
+
+ANSWER HERE: Yes
+
+Next, fit another logit model called `log3` in which both `RCT` and `TopFive` are removed, and use `lrtest` from **lmtest** to compare `log1` to `log3`.
+
+```{r}
+log3 <- glm(Replicated_num ~ Citations1000 + Year, family = binomial(link = 'logit'), 
+            data = rep)
+
+lrtest(log1, log3)
+```
+
+Are these two jointly significant under this test at the 1% level?
+
+ANSWER HERE: Yes
+
+Note that these two tests will generally give similar results, but the `linearHypothesis()` one works on the index while `lrtest` works on predictions.
